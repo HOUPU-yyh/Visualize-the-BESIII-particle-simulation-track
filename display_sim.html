@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>粒子径迹可视化工具 - 固定正方形版</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+        }
+        /* 确保图表区域正方形 - 增大尺寸 */
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 700px; /* 从500px增加到700px */
+            margin: 0 auto;
+        }
+        .chart-outer {
+            width: 100%;
+            padding-bottom: 100%; /* 1:1 纵横比 */
+            position: relative;
+        }
+        .chart-inner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .tooltip {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid #3b82f6;
+            border-radius: 6px;
+            padding: 10px;
+            pointer-events: none;
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+            max-width: 350px;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-6">
+        <!-- 头部 -->
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-white mb-2">粒子径迹可视化工具</h1>
+            <p class="text-gray-400">固定范围：±80m | 正方形图表</p>
+        </header>
+
+        <!-- 主界面 -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- 控制面板 -->
+            <div class="lg:col-span-1 bg-slate-800 rounded-xl p-4">
+                <h2 class="text-xl font-semibold mb-4">
+                    <i class="fas fa-sliders-h mr-2 text-blue-500"></i>控制面板
+                </h2>
+                
+                <!-- 文件上传 -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-file-csv mr-2"></i>上传CSV文件
+                    </label>
+                    <input type="file" id="fileInput" accept=".csv" 
+                           class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600">
+                    <div id="fileInfo" class="mt-2 text-xs text-gray-400"></div>
+                </div>
+
+                <!-- 解析按钮 -->
+                <button id="parseBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg mb-4">
+                    <i class="fas fa-cogs mr-2"></i>解析文件
+                </button>
+
+                <!-- 调试按钮 -->
+                <button onclick="debugData()" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg mb-4">
+                    <i class="fas fa-bug mr-2"></i>调试数据
+                </button>
+
+                <!-- 事件选择 -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-calendar-alt mr-2"></i>选择事件
+                    </label>
+                    <select id="eventSelector" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white">
+                        <option value="">-- 先解析文件 --</option>
+                    </select>
+                    <div id="eventInfo" class="mt-2 text-xs text-gray-400"></div>
+                </div>
+
+                <!-- 显示选项 -->
+                <div class="mb-4">
+                    <h3 class="text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-eye mr-2"></i>显示选项
+                    </h3>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" id="showNoise" checked class="mr-2">
+                            <span class="text-sm">噪声点</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" id="showTracks" checked class="mr-2">
+                            <span class="text-sm">粒子径迹</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 点大小控制 -->
+                <div class="mb-4 p-3 bg-slate-900 rounded-lg">
+                    <h3 class="text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-expand-alt mr-2"></i>点大小控制
+                    </h3>
+                    <div class="space-y-2">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">噪声点大小</label>
+                            <input type="range" id="noiseSize" min="1" max="5" value="2" step="0.5" class="w-full">
+                            <div class="flex justify-between text-xs text-gray-400 mt-1">
+                                <span>小</span>
+                                <span id="noiseSizeValue">2</span>
+                                <span>大</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">径迹点大小</label>
+                            <input type="range" id="trackSize" min="1" max="5" value="3" step="0.5" class="w-full">
+                            <div class="flex justify-between text-xs text-gray-400 mt-1">
+                                <span>小</span>
+                                <span id="trackSizeValue">3</span>
+                                <span>大</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 数据统计 -->
+                <div class="mt-6 p-3 bg-slate-900 rounded-lg">
+                    <h3 class="text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-chart-bar mr-2"></i>统计信息
+                    </h3>
+                    <div class="space-y-1 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">总事件数:</span>
+                            <span id="totalEvents" class="font-medium">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">总数据行:</span>
+                            <span id="totalRows" class="font-medium">-</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">有效坐标:</span>
+                            <span id="validCoords" class="font-medium">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 可视化区域 -->
+            <div class="lg:col-span-3 bg-slate-800 rounded-xl p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold">
+                        <i class="fas fa-chart-line mr-2 text-blue-500"></i>
+                        <span id="currentEventTitle">粒子径迹可视化</span>
+                    </h2>
+                    <button id="resetViewBtn" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">
+                        <i class="fas fa-sync-alt mr-2"></i>重置视图
+                    </button>
+                </div>
+
+                <!-- 图表容器 - 正方形（已增大） -->
+                <div class="chart-wrapper">
+                    <div class="chart-outer bg-slate-900 rounded-lg">
+                        <div class="chart-inner">
+                            <canvas id="particleChart"></canvas>
+                            <div id="tooltip" class="tooltip"></div>
+                            
+                            <!-- 空状态 -->
+                            <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center">
+                                <i class="fas fa-chart-scatter text-6xl text-slate-700 mb-4"></i>
+                                <p class="text-slate-400">请上传并解析CSV文件</p>
+                            </div>
+                            
+                            <!-- 加载状态 -->
+                            <div id="loadingState" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 hidden">
+                                <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+                                <p class="text-white">正在加载...</p>
+                            </div>
+                            
+                            <!-- 数据状态 -->
+                            <div id="dataStatus" class="absolute top-2 left-2 bg-slate-800/80 px-3 py-1 rounded text-xs">
+                                等待数据...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 范围信息 -->
+                <div class="mt-4 text-center text-sm text-gray-400">
+                    <div class="inline-flex items-center space-x-4">
+                        <span>X轴: -80m 到 +80m</span>
+                        <span>•</span>
+                        <span>Y轴: -80m 到 +80m</span>
+                        <span>•</span>
+                        <span>图表: 正方形 (1:1)</span>
+                    </div>
+                </div>
+
+                <!-- 调试信息 -->
+                <div class="mt-4 p-3 bg-slate-900 rounded-lg">
+                    <h3 class="text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-info-circle mr-2"></i>解析信息
+                    </h3>
+                    <div id="parseInfo" class="text-xs text-gray-400">
+                        未解析文件
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="mt-6 bg-slate-800 rounded-xl p-4">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-table mr-2 text-blue-500"></i>数据预览
+                </h2>
+                <div id="tableInfo" class="text-sm text-gray-400">
+                    显示 0 行数据
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-slate-900">
+                            <th class="px-4 py-2 text-left">Row</th>
+                            <th class="px-4 py-2 text-left">Run</th>
+                            <th class="px-4 py-2 text-left">Event</th>
+                            <th class="px-4 py-2 text-left">TrackIndex</th>
+                            <th class="px-4 py-2 text-left">middleX</th>
+                            <th class="px-4 py-2 text-left">middleY</th>
+                            <th class="px-4 py-2 text-left">Layer</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody">
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-slate-400">
+                                <i class="fas fa-database text-2xl mb-2 block"></i>
+                                请解析文件并选择事件
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let currentFile = null;
+        let parsedData = null;
+        let eventsMap = new Map();
+        let currentEventData = null;
+        let particleChart = null;
+        let trackColors = [];
+        let trackVisibility = {};
+        const BASE_RANGE = 80; // 基础范围：±80m
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initChart();
+            setupEventListeners();
+        });
+
+        // 初始化图表 - 固定XY轴范围，强制正方形
+        function initChart() {
+            const ctx = document.getElementById('particleChart').getContext('2d');
+            
+            // 获取容器尺寸，确保canvas是正方形
+            const container = document.querySelector('.chart-inner');
+            const canvas = document.getElementById('particleChart');
+            const size = Math.min(container.clientWidth, container.clientHeight);
+            
+            canvas.width = size;
+            canvas.height = size;
+            
+            particleChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: []
+                },
+                options: {
+                    responsive: false, // 禁用响应式，我们自己控制尺寸
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'center',
+                            min: -BASE_RANGE,
+                            max: BASE_RANGE,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.5)',
+                                callback: function(value) {
+                                    return value + 'm';
+                                },
+                                stepSize: 20
+                            },
+                            title: {
+                                display: true,
+                                text: 'X (m)',
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            position: 'center',
+                            min: -BASE_RANGE,
+                            max: BASE_RANGE,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.5)',
+                                callback: function(value) {
+                                    return value + 'm';
+                                },
+                                stepSize: 20
+                            },
+                            title: {
+                                display: true,
+                                text: 'Y (m)',
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false }
+                    },
+                    elements: {
+                        point: {
+                            radius: 2, // 默认点大小较小
+                            hoverRadius: 4, // 悬停时稍微大一点
+                            borderWidth: 0.5 // 边框更细
+                        }
+                    },
+                    animation: {
+                        duration: 0
+                    }
+                }
+            });
+
+            setupChartInteractions();
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            document.getElementById('parseBtn').addEventListener('click', parseFile);
+            document.getElementById('eventSelector').addEventListener('change', handleEventSelect);
+            document.getElementById('fileInput').addEventListener('change', function(e) {
+                currentFile = e.target.files[0];
+                document.getElementById('fileInfo').textContent = 
+                    currentFile ? `已选择: ${currentFile.name}` : '';
+            });
+            
+            // 显示选项监听
+            document.getElementById('showNoise').addEventListener('change', updateChart);
+            document.getElementById('showTracks').addEventListener('change', updateChart);
+            
+            // 点大小控制监听
+            document.getElementById('noiseSize').addEventListener('input', function(e) {
+                document.getElementById('noiseSizeValue').textContent = e.target.value;
+                updateChart();
+            });
+            
+            document.getElementById('trackSize').addEventListener('input', function(e) {
+                document.getElementById('trackSizeValue').textContent = e.target.value;
+                updateChart();
+            });
+            
+            document.getElementById('resetViewBtn').addEventListener('click', resetView);
+        }
+
+        // 重置视图
+        function resetView() {
+            if (!particleChart) return;
+            
+            particleChart.options.scales.x.min = -BASE_RANGE;
+            particleChart.options.scales.x.max = BASE_RANGE;
+            particleChart.options.scales.y.min = -BASE_RANGE;
+            particleChart.options.scales.y.max = BASE_RANGE;
+            
+            particleChart.update();
+            
+            document.getElementById('dataStatus').innerHTML += '<br>视图已重置';
+        }
+
+        // 解析文件
+        async function parseFile() {
+            if (!currentFile) {
+                alert('请先选择CSV文件');
+                return;
+            }
+
+            showLoading(true);
+            document.getElementById('parseInfo').textContent = '开始解析文件...';
+            
+            try {
+                const text = await readFileAsText(currentFile);
+                const result = parseCSV(text);
+                
+                parsedData = result.data;
+                eventsMap = result.eventsMap;
+                
+                updateEventSelector();
+                updateStatistics();
+                
+                showLoading(false);
+                document.getElementById('parseInfo').innerHTML = 
+                    `解析成功！<br>总数据行数: ${parsedData.length}<br>事件数量: ${eventsMap.size}<br>有效坐标行数: ${result.validCoords}`;
+                
+                if (eventsMap.size > 0) {
+                    const firstKey = Array.from(eventsMap.keys())[0];
+                    document.getElementById('eventSelector').value = firstKey;
+                    handleEventSelect({ target: { value: firstKey } });
+                }
+                
+            } catch (error) {
+                showLoading(false);
+                document.getElementById('parseInfo').textContent = '解析失败: ' + error.message;
+                console.error('解析错误:', error);
+            }
+        }
+
+        // 读取文件为文本
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('读取文件失败'));
+                reader.readAsText(file);
+            });
+        }
+
+        // 解析CSV
+        function parseCSV(csvText) {
+            console.log('开始解析CSV...');
+            
+            const processedText = csvText
+                .replace(/,\s*$/gm, '')
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n');
+            
+            const lines = processedText.split('\n');
+            
+            if (lines.length < 2) {
+                throw new Error('CSV文件格式不正确或为空');
+            }
+            
+            const headers = lines[0].split(',').map(h => h.trim());
+            
+            const runIndex = headers.indexOf('run');
+            const eventIndex = headers.indexOf('event');
+            const trackIndexCol = headers.indexOf('trackIndex');
+            const middleXIndex = headers.indexOf('middleX');
+            const middleYIndex = headers.indexOf('middleY');
+            const layerIndex = headers.indexOf('layer');
+            const pxIndex = headers.indexOf('px');
+            const pyIndex = headers.indexOf('py');
+            const pzIndex = headers.indexOf('pz');
+            // 添加新字段的索引
+            const momXIndex = headers.indexOf('momX');
+            const momYIndex = headers.indexOf('momY');
+            const momZIndex = headers.indexOf('momZ');
+            const pidIndex = headers.indexOf('PID');
+            const motherPidIndex = headers.indexOf('motherPID');
+            const processIndex = headers.indexOf('process');
+            
+            if (runIndex === -1 || eventIndex === -1) {
+                throw new Error('找不到run或event列');
+            }
+            
+            if (middleXIndex === -1 || middleYIndex === -1) {
+                throw new Error('找不到middleX或middleY列');
+            }
+            
+            const data = [];
+            const eventsMap = new Map();
+            let validCoords = 0;
+            
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                
+                const values = line.split(',');
+                
+                if (values.length < Math.max(runIndex, eventIndex, middleXIndex, middleYIndex) + 1) {
+                    continue;
+                }
+                
+                const run = values[runIndex] ? values[runIndex].trim() : null;
+                const event = values[eventIndex] ? values[eventIndex].trim() : null;
+                const trackIndex = trackIndexCol !== -1 && values[trackIndexCol] ? parseInt(values[trackIndexCol].trim()) || 0 : 0;
+                const middleX = middleXIndex !== -1 && values[middleXIndex] ? parseFloat(values[middleXIndex].trim()) : null;
+                const middleY = middleYIndex !== -1 && values[middleYIndex] ? parseFloat(values[middleYIndex].trim()) : null;
+                const layer = layerIndex !== -1 && values[layerIndex] ? values[layerIndex].trim() : null;
+                const px = pxIndex !== -1 && values[pxIndex] ? parseFloat(values[pxIndex].trim()) : null;
+                const py = pyIndex !== -1 && values[pyIndex] ? parseFloat(values[pyIndex].trim()) : null;
+                const pz = pzIndex !== -1 && values[pzIndex] ? parseFloat(values[pzIndex].trim()) : null;
+                // 解析新字段
+                const momX = momXIndex !== -1 && values[momXIndex] ? parseFloat(values[momXIndex].trim()) : null;
+                const momY = momYIndex !== -1 && values[momYIndex] ? parseFloat(values[momYIndex].trim()) : null;
+                const momZ = momZIndex !== -1 && values[momZIndex] ? parseFloat(values[momZIndex].trim()) : null;
+                const pid = pidIndex !== -1 && values[pidIndex] ? parseInt(values[pidIndex].trim()) : null;
+                const motherPid = motherPidIndex !== -1 && values[motherPidIndex] ? parseInt(values[motherPidIndex].trim()) : null;
+                const process = processIndex !== -1 && values[processIndex] ? values[processIndex].trim() : null;
+                
+                const row = {
+                    run: run,
+                    event: event,
+                    trackIndex: trackIndex,
+                    middleX: middleX,
+                    middleY: middleY,
+                    layer: layer,
+                    px: px,
+                    py: py,
+                    pz: pz,
+                    // 添加新字段
+                    momX: momX,
+                    momY: momY,
+                    momZ: momZ,
+                    PID: pid,
+                    motherPID: motherPid,
+                    process: process,
+                    _index: i
+                };
+                
+                data.push(row);
+                
+                if (middleX != null && middleY != null && !isNaN(middleX) && !isNaN(middleY)) {
+                    validCoords++;
+                }
+                
+                if (run && event) {
+                    const key = `${run}|${event}`;
+                    if (!eventsMap.has(key)) {
+                        eventsMap.set(key, {
+                            run: run,
+                            event: event,
+                            count: 0,
+                            hasValidPoints: false
+                        });
+                    }
+                    eventsMap.get(key).count++;
+                    
+                    if (middleX != null && middleY != null && !isNaN(middleX) && !isNaN(middleY)) {
+                        eventsMap.get(key).hasValidPoints = true;
+                    }
+                }
+            }
+            
+            console.log(`解析完成: ${data.length} 行数据，${validCoords} 行有效坐标，${eventsMap.size} 个事件`);
+            
+            return {
+                data: data,
+                eventsMap: eventsMap,
+                headers: headers,
+                validCoords: validCoords
+            };
+        }
+
+        // 更新事件选择器
+        function updateEventSelector() {
+            const selector = document.getElementById('eventSelector');
+            selector.innerHTML = '<option value="">-- 选择事件 --</option>';
+            
+            const events = Array.from(eventsMap.entries())
+                .sort((a, b) => {
+                    const [runA, eventA] = a[0].split('|');
+                    const [runB, eventB] = b[0].split('|');
+                    
+                    const runANum = parseInt(runA);
+                    const runBNum = parseInt(runB);
+                    const eventANum = parseInt(eventA);
+                    const eventBNum = parseInt(eventB);
+                    
+                    if (!isNaN(runANum) && !isNaN(runBNum)) {
+                        if (runANum !== runBNum) return runANum - runBNum;
+                    } else {
+                        if (runA !== runB) return runA.localeCompare(runB);
+                    }
+                    
+                    if (!isNaN(eventANum) && !isNaN(eventBNum)) {
+                        return eventANum - eventBNum;
+                    } else {
+                        return eventA.localeCompare(eventB);
+                    }
+                });
+            
+            events.forEach(([key, info]) => {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = `Run ${info.run}, Event ${info.event} (${info.count}行)`;
+                selector.appendChild(option);
+            });
+            
+            const totalEvents = eventsMap.size;
+            const eventsWithData = Array.from(eventsMap.values()).filter(e => e.hasValidPoints).length;
+            document.getElementById('eventInfo').textContent = 
+                `${totalEvents} 个事件，${eventsWithData} 个有数据`;
+        }
+
+        // 处理事件选择
+        function handleEventSelect(event) {
+            const key = event.target.value;
+            if (!key || !parsedData) return;
+            
+            const [run, eventId] = key.split('|');
+            
+            document.getElementById('currentEventTitle').textContent = `Run ${run}, Event ${eventId}`;
+            document.getElementById('dataStatus').textContent = `过滤事件 ${key}...`;
+            document.getElementById('dataStatus').style.display = 'block';
+            
+            currentEventData = parsedData.filter(row => {
+                const rowRun = String(row.run);
+                const rowEvent = String(row.event);
+                return rowRun === run && rowEvent === eventId;
+            });
+            
+            const validPoints = currentEventData.filter(row => 
+                row.middleX != null && row.middleY != null && 
+                !isNaN(row.middleX) && !isNaN(row.middleY)
+            );
+            
+            const pointsInRange = validPoints.filter(row => 
+                Math.abs(row.middleX) <= BASE_RANGE && Math.abs(row.middleY) <= BASE_RANGE
+            );
+            
+            const pointsOutOfRange = validPoints.length - pointsInRange.length;
+            
+            if (validPoints.length === 0) {
+                document.getElementById('dataStatus').innerHTML = 
+                    `事件 ${key}: ${currentEventData.length} 行，但无有效坐标数据`;
+            } else {
+                let statusHtml = `事件 ${key}: ${currentEventData.length} 行，${validPoints.length} 个有效点`;
+                
+                if (pointsOutOfRange > 0) {
+                    statusHtml += `<br><span class="text-yellow-300">${pointsOutOfRange} 个点超出 ±${BASE_RANGE}m 范围</span>`;
+                }
+                
+                document.getElementById('dataStatus').innerHTML = statusHtml;
+            }
+            
+            updateChart();
+            updateDataTable();
+            document.getElementById('emptyState').style.display = 'none';
+        }
+
+        // 更新图表
+        function updateChart() {
+            if (!currentEventData || !particleChart) {
+                console.log('没有数据或图表未初始化');
+                return;
+            }
+            
+            const showNoise = document.getElementById('showNoise').checked;
+            const showTracks = document.getElementById('showTracks').checked;
+            const noiseSize = parseFloat(document.getElementById('noiseSize').value);
+            const trackSize = parseFloat(document.getElementById('trackSize').value);
+            
+            // 过滤有效数据点
+            const validData = currentEventData.filter(row => 
+                row.middleX != null && row.middleY != null && 
+                !isNaN(row.middleX) && !isNaN(row.middleY)
+            );
+            
+            // 过滤在范围内的点
+            const dataInRange = validData.filter(row => 
+                Math.abs(row.middleX) <= BASE_RANGE * 1.5 && Math.abs(row.middleY) <= BASE_RANGE * 1.5
+            );
+            
+            particleChart.data.datasets = [];
+            
+            if (dataInRange.length === 0) {
+                document.getElementById('dataStatus').innerHTML += '<br>没有在范围内的数据点可显示';
+                particleChart.update();
+                return;
+            }
+            
+            // 分离噪声点和径迹
+            const noiseData = dataInRange.filter(row => row.trackIndex === 0);
+            const trackData = dataInRange.filter(row => row.trackIndex !== 0);
+            
+            // 添加噪声点 - 使用更小的点
+            if (showNoise && noiseData.length > 0) {
+                particleChart.data.datasets.push({
+                    label: '噪声点',
+                    data: noiseData.map(row => ({
+                        x: row.middleX,
+                        y: row.middleY,
+                        layer: row.layer,
+                        trackIndex: 0,
+                        middleX: row.middleX,
+                        middleY: row.middleY,
+                        px: row.px,
+                        py: row.py,
+                        pz: row.pz,
+                        // 添加新字段到数据点
+                        momX: row.momX,
+                        momY: row.momY,
+                        momZ: row.momZ,
+                        PID: row.PID,
+                        motherPID: row.motherPID,
+                        process: row.process
+                    })),
+                    backgroundColor: 'rgba(156, 163, 175, 0.4)', // 更透明
+                    borderColor: 'rgba(156, 163, 175, 0.6)',
+                    pointRadius: noiseSize, // 使用滑块控制的大小
+                    pointHoverRadius: noiseSize * 1.5,
+                    borderWidth: 0.3
+                });
+            }
+            
+            // 添加径迹点 - 使用更小的点
+            if (showTracks && trackData.length > 0) {
+                const trackGroups = {};
+                trackData.forEach(row => {
+                    const trackIdx = row.trackIndex;
+                    if (!trackGroups[trackIdx]) {
+                        trackGroups[trackIdx] = [];
+                    }
+                    trackGroups[trackIdx].push(row);
+                });
+                
+                const trackIndices = Object.keys(trackGroups).sort((a, b) => a - b);
+                
+                trackColors = generateColors(trackIndices.length);
+                
+                trackIndices.forEach(trackIdx => {
+                    if (trackVisibility[trackIdx] === undefined) {
+                        trackVisibility[trackIdx] = true;
+                    }
+                });
+                
+                trackIndices.forEach((trackIdx, index) => {
+                    if (!trackVisibility[trackIdx]) return;
+                    
+                    const trackPoints = trackGroups[trackIdx];
+                    const color = trackColors[index];
+                    
+                    particleChart.data.datasets.push({
+                        label: `径迹 ${trackIdx}`,
+                        data: trackPoints.map(row => ({
+                            x: row.middleX,
+                            y: row.middleY,
+                            layer: row.layer,
+                            trackIndex: row.trackIndex,
+                            middleX: row.middleX,
+                            middleY: row.middleY,
+                            px: row.px,
+                            py: row.py,
+                            pz: row.pz,
+                            // 添加新字段到数据点
+                            momX: row.momX,
+                            momY: row.momY,
+                            momZ: row.momZ,
+                            PID: row.PID,
+                            motherPID: row.motherPID,
+                            process: row.process
+                        })),
+                        backgroundColor: color.replace('0.8', '0.5'), // 更透明
+                        borderColor: color,
+                        pointRadius: trackSize, // 使用滑块控制的大小
+                        pointHoverRadius: trackSize * 1.5,
+                        borderWidth: 0.5
+                    });
+                });
+            }
+            
+            particleChart.update();
+        }
+
+        // 生成颜色
+        function generateColors(count) {
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                const hue = (i * 137.5) % 360;
+                colors.push(`hsla(${hue}, 70%, 60%, 0.8)`);
+            }
+            return colors;
+        }
+
+        // 更新数据表格
+        function updateDataTable() {
+            const tableBody = document.getElementById('dataTableBody');
+            const tableInfo = document.getElementById('tableInfo');
+            
+            if (!currentEventData || currentEventData.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-slate-400">
+                            当前事件没有数据
+                        </td>
+                    </tr>
+                `;
+                tableInfo.textContent = '显示 0 行数据';
+                return;
+            }
+            
+            const displayData = currentEventData.slice(0, 10);
+            
+            let html = '';
+            displayData.forEach((row, index) => {
+                const isNoise = row.trackIndex === 0;
+                const x = row.middleX;
+                const y = row.middleY;
+                
+                html += `
+                    <tr class="${isNoise ? 'bg-slate-900/50' : ''} hover:bg-slate-700/50">
+                        <td class="px-4 py-2 text-gray-400">${row._index || index}</td>
+                        <td class="px-4 py-2">${row.run || ''}</td>
+                        <td class="px-4 py-2">${row.event || ''}</td>
+                        <td class="px-4 py-2 ${isNoise ? 'text-slate-400' : 'text-white'}">
+                            ${isNoise ? 'Noise' : row.trackIndex}
+                        </td>
+                        <td class="px-4 py-2">${x != null ? x.toFixed(3) : 'null'}</td>
+                        <td class="px-4 py-2">${y != null ? y.toFixed(3) : 'null'}</td>
+                        <td class="px-4 py-2">${row.layer || '-'}</td>
+                    </tr>
+                `;
+            });
+            
+            tableBody.innerHTML = html;
+            tableInfo.textContent = `显示 ${displayData.length} 行数据（共 ${currentEventData.length} 行）`;
+        }
+
+        // 更新统计信息
+        function updateStatistics() {
+            document.getElementById('totalEvents').textContent = eventsMap.size;
+            document.getElementById('totalRows').textContent = parsedData ? parsedData.length : '-';
+            document.getElementById('validCoords').textContent = parsedData ? 
+                parsedData.filter(row => row.middleX != null && row.middleY != null).length : '-';
+        }
+
+        // 显示/隐藏加载状态
+        function showLoading(show) {
+            document.getElementById('loadingState').style.display = show ? 'flex' : 'none';
+        }
+
+        // 调试数据
+        window.debugData = function() {
+            if (!parsedData) {
+                console.log('还没有解析数据');
+                return;
+            }
+            
+            console.log('=== 调试数据 ===');
+            console.log('总数据行数:', parsedData.length);
+            console.log('事件数量:', eventsMap.size);
+            
+            const events = Array.from(eventsMap.entries()).slice(0, 5);
+            events.forEach(([key, info]) => {
+                console.log(`事件 ${key}: run=${info.run}, event=${info.event}, count=${info.count}`);
+            });
+            
+            document.getElementById('parseInfo').innerHTML = 
+                `调试信息已输出到控制台<br>总行数: ${parsedData.length}<br>事件数: ${eventsMap.size}`;
+        };
+
+        // 设置图表交互
+        function setupChartInteractions() {
+            const chartContainer = document.getElementById('particleChart');
+            const tooltip = document.getElementById('tooltip');
+            
+            if (!chartContainer || !tooltip) return;
+            
+            chartContainer.addEventListener('mousemove', function(event) {
+                const chart = particleChart;
+                if (!chart) return;
+                
+                const points = chart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true);
+                
+                if (points.length > 0) {
+                    const point = points[0];
+                    const dataset = chart.data.datasets[point.datasetIndex];
+                    const dataPoint = dataset.data[point.index];
+                    
+                    const rect = chart.canvas.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+                    
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = `${x + 10}px`;
+                    tooltip.style.top = `${y + 10}px`;
+                    
+                    // 计算到原点的距离
+                    const distance = Math.sqrt(dataPoint.x * dataPoint.x + dataPoint.y * dataPoint.y).toFixed(2);
+                    
+                    // 构建动量信息 - 修正：优先显示momX, momY, momZ
+                    let momentumInfo = '';
+                    let hasMomentum = false;
+                    
+                    if (dataPoint.momX !== null || dataPoint.momY !== null || dataPoint.momZ !== null) {
+                        hasMomentum = true;
+                        const totalMom = Math.sqrt(
+                            (dataPoint.momX || 0) * (dataPoint.momX || 0) + 
+                            (dataPoint.momY || 0) * (dataPoint.momY || 0) + 
+                            (dataPoint.momZ || 0) * (dataPoint.momZ || 0)
+                        ).toFixed(3);
+                        
+                        momentumInfo = `
+                            <div class="mt-2 pt-2 border-t border-gray-700">
+                                <div class="font-semibold text-blue-300">XYZ方向动量:</div>
+                                <div>momX: ${dataPoint.momX !== null ? dataPoint.momX.toFixed(3) : '-'}</div>
+                                <div>momY: ${dataPoint.momY !== null ? dataPoint.momY.toFixed(3) : '-'}</div>
+                                <div>momZ: ${dataPoint.momZ !== null ? dataPoint.momZ.toFixed(3) : '-'}</div>
+                                <div>总动量: ${totalMom}</div>
+                        `;
+                    }
+                    
+                    // 如果同时有px,py,pz，也显示（向后兼容）
+                    if (dataPoint.px !== null && dataPoint.py !== null && dataPoint.pz !== null) {
+                        const totalP = Math.sqrt(
+                            dataPoint.px * dataPoint.px + 
+                            dataPoint.py * dataPoint.py + 
+                            dataPoint.pz * dataPoint.pz
+                        ).toFixed(3);
+                        
+                        if (hasMomentum) {
+                            momentumInfo += `
+                                <div class="mt-1 pt-1 border-t border-gray-600">
+                                    <div class="font-semibold text-green-300">传统动量:</div>
+                                    <div>px: ${dataPoint.px.toFixed(3)}</div>
+                                    <div>py: ${dataPoint.py.toFixed(3)}</div>
+                                    <div>pz: ${dataPoint.pz.toFixed(3)}</div>
+                                    <div>总动量: ${totalP}</div>
+                                </div>
+                            `;
+                        } else {
+                            momentumInfo = `
+                                <div class="mt-2 pt-2 border-t border-gray-700">
+                                    <div class="font-semibold text-blue-300">动量信息:</div>
+                                    <div>px: ${dataPoint.px.toFixed(3)}</div>
+                                    <div>py: ${dataPoint.py.toFixed(3)}</div>
+                                    <div>pz: ${dataPoint.pz.toFixed(3)}</div>
+                                    <div>总动量: ${totalP}</div>
+                            `;
+                            hasMomentum = true;
+                        }
+                    }
+                    
+                    if (hasMomentum) {
+                        momentumInfo += `</div>`;
+                    }
+                    
+                    // 构建粒子信息
+                    let particleInfo = '';
+                    if (dataPoint.PID !== null || dataPoint.motherPID !== null || dataPoint.process !== null || dataPoint.layer !== null) {
+                        particleInfo = `
+                            <div class="mt-2 pt-2 border-t border-gray-700">
+                                <div class="font-semibold text-purple-300">粒子信息:</div>
+                                <div>PID: ${dataPoint.PID !== null ? dataPoint.PID : '-'}</div>
+                                <div>母粒子PID: ${dataPoint.motherPID !== null ? dataPoint.motherPID : '-'}</div>
+                                <div>过程: ${dataPoint.process !== null ? dataPoint.process : '-'}</div>
+                                <div>层: ${dataPoint.layer || '-'}</div>
+                            </div>
+                        `;
+                    }
+                    
+                    tooltip.innerHTML = `
+                        <div class="font-semibold mb-1">
+                            ${dataPoint.trackIndex === 0 ? '噪声点' : `径迹 ${dataPoint.trackIndex}`}
+                        </div>
+                        <div class="text-xs space-y-1">
+                            <div>位置: (${dataPoint.x.toFixed(3)}, ${dataPoint.y.toFixed(3)}) m</div>
+                            <div>距原点: ${distance} m</div>
+                            ${momentumInfo}
+                            ${particleInfo}
+                        </div>
+                    `;
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            });
+            
+            chartContainer.addEventListener('mouseleave', function() {
+                tooltip.style.display = 'none';
+            });
+        }
+
+        // 窗口大小变化时重新初始化图表
+        window.addEventListener('resize', function() {
+            if (particleChart) {
+                // 重新计算canvas尺寸
+                const container = document.querySelector('.chart-inner');
+                const canvas = document.getElementById('particleChart');
+                const size = Math.min(container.clientWidth, container.clientHeight);
+                
+                canvas.width = size;
+                canvas.height = size;
+                
+                particleChart.update();
+            }
+        });
+    </script>
+</body>
+</html>
